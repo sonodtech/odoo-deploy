@@ -1,0 +1,20 @@
+---
+- name: NGINX | Creating a symlink for maintenance
+  become: true
+  ansible.builtin.file:
+    src: "/etc/nginx/sites-available/{{ nginx_maintenance_conf }}"
+    dest: "/etc/nginx/sites-enabled/{{ nginx_enabled_conf }}"
+    state: link
+    force: true
+
+- name: NGINX | Service reload
+  become: true
+  ansible.builtin.systemd:
+    name: nginx
+    state: reloaded
+
+- name: ODOO | Service stop
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ odoo_service }}"
+    state: stopped

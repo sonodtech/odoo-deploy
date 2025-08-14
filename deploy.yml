@@ -1,0 +1,16 @@
+---
+- name: Deploy odoo project using ansistrano
+  hosts: all
+  remote_user: "{{ deploy_user }}"
+  vars:
+    ansistrano_deploy_from: "{{ release_folder }}"
+    ansistrano_deploy_to: "{{ deploy_folder }}"
+    ansistrano_keep_releases: 3
+    ansistrano_deploy_via: rsync
+    ansistrano_allow_anonymous_stats: no
+    ansistrano_after_update_code_tasks_file: "{{ playbook_dir }}/tasks/after-update-code.yml"
+    ansistrano_before_symlink_tasks_file: "{{ playbook_dir }}/tasks/before-symlink.yml"
+    ansistrano_after_cleanup_tasks_file: "{{ playbook_dir }}/tasks/after-cleanup.yml"
+  tasks:
+    - include_role:
+        name: ansistrano.deploy

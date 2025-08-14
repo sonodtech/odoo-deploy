@@ -1,0 +1,20 @@
+---
+- name: VIRTUAL ENVIRONMENT | Create virtual environment and update PIP
+  ansible.builtin.pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ ansistrano_release_path.stdout }}/venv"
+    virtualenv_python: "{{ python_version }}"
+
+- name: VIRTUAL ENVIRONMENT | Find to catch recursively all wheels
+  ansible.builtin.find:
+    paths: "{{ ansistrano_release_path.stdout }}/release"
+    patterns: "*.whl"
+    recurse: true
+  register: wheel_search
+
+- name: VIRTUAL ENVIRONMENT | Install python requirements
+  ansible.builtin.pip:
+    name: "{{ wheel_search.files | map(attribute='path') | list }}"
+    extra_args: "--no-index"
+    virtualenv: "{{ ansistrano_release_path.stdout }}/venv"

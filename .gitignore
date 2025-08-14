@@ -1,0 +1,7 @@
+# IDE
+.idea/
+.vscode/
+
+# Ansible files
+.vaultpass
+hosts.*
