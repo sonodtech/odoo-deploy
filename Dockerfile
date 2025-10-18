@@ -5,7 +5,11 @@ RUN set -x \
   && apk add --no-cache \
     ansible \
     openssh-client \
-    rsync
+    rsync \ 
+    git \
+    curl \ 
+    jq \
+    openssh-client
 
 
 RUN adduser -D -s /bin/sh gitlab-runner -g ""
