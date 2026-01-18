@@ -68,9 +68,9 @@
     age: "2d" # Optional: strictly rotate by count below, but age is good safety
   register: old_backups
 
-- name: BACKUP | Cleanup old backups (Keep last 2)
+- name: BACKUP | Cleanup old backups (Keep last 1)
   ansible.builtin.shell: |
-    ls -tp {{ backup_dir }}/{{ dbname }}-*.sql | grep -v '/$' | tail -n +3 | xargs -I {} rm -- {}
+    ls -tp {{ backup_dir }}/{{ dbname }}-*.sql | grep -v '/$' | tail -n +2 | xargs -I {} rm -- {}
 
   ignore_errors: true
   # Simple shell one-liner is often more reliable for "keep N" than complex find logic in ansible
