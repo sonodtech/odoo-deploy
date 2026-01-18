@@ -1,25 +1,25 @@
 ---
-- name: CONFIG | Extract db_name from Odoo configuration
-  ansible.builtin.shell: |
-    grep -h "^db_name" "{{ deploy_folder }}/odoo.conf" "/etc/odoo.conf" 2>/dev/null | head -n 1 | cut -d '=' -f2 | tr -d ' '
-  register: odoo_dbname_output
-  changed_when: false
-  failed_when: false
+# - name: CONFIG | Extract db_name from Odoo configuration
+#   ansible.builtin.shell: |
+#     grep -h "^db_name" "{{ deploy_folder }}/odoo.conf" "/etc/odoo.conf" 2>/dev/null | head -n 1 | cut -d '=' -f2 | tr -d ' '
+#   register: odoo_dbname_output
+#   changed_when: false
+#   failed_when: false
 
-- name: CONFIG | Set dbname variable
-  ansible.builtin.set_fact:
-    dbname: "{{ odoo_dbname_output.stdout }}"
-  when: odoo_dbname_output.stdout | length > 0
+# - name: CONFIG | Set dbname variable
+#   ansible.builtin.set_fact:
+#     dbname: "{{ odoo_dbname_output.stdout }}"
+#   when: odoo_dbname_output.stdout | length > 0
 
 
-- name: BACKUP | Define backup variables
-  ansible.builtin.set_fact:
-    backup_timestamp: "{{ lookup('pipe', 'date +%Y-%m-%d_%H-%M-%S') }}"
+# - name: BACKUP | Define backup variables
+#   ansible.builtin.set_fact:
+#     backup_timestamp: "{{ lookup('pipe', 'date +%Y-%m-%d_%H-%M-%S') }}"
   
-- name: BACKUP | Set backup path
-  ansible.builtin.set_fact:
-    backup_name: "{{ dbname }}-{{ backup_timestamp }}.sql"
-    backup_dir: "{{ deploy_folder }}/backups"
+# - name: BACKUP | Set backup path
+#   ansible.builtin.set_fact:
+#     backup_name: "{{ dbname }}-{{ backup_timestamp }}.sql"
+#     backup_dir: "{{ deploy_folder }}/backups"
 
 - name: NGINX | Creating a symlink for maintenance
   become: true
@@ -41,36 +41,36 @@
     name: "{{ odoo_service }}"
     state: stopped
 
-- name: BACKUP | Ensure backup directory exists
-  ansible.builtin.file:
-    path: "{{ backup_dir }}"
-    state: directory
-    mode: '0755'
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+# - name: BACKUP | Ensure backup directory exists
+#   ansible.builtin.file:
+#     path: "{{ backup_dir }}"
+#     state: directory
+#     mode: '0755'
+#     owner: "{{ deploy_user }}"
+#     group: "{{ deploy_user }}"
 
-- name: ODOO | Backup DB
-  ansible.builtin.shell: >
-    {{ deploy_folder }}/current/venv/bin/click-odoo-backupdb 
-    -c {{ odoo_conf }} 
-    --no-filestore 
-    --format dump 
-    {{ dbname }} 
+# - name: ODOO | Backup DB
+#   ansible.builtin.shell: >
+#     {{ deploy_folder }}/current/venv/bin/click-odoo-backupdb 
+#     -c {{ odoo_conf }} 
+#     --no-filestore 
+#     --format dump 
+#     {{ dbname }} 
 
-    {{ backup_dir }}/{{ backup_name }}
-  args:
-    executable: /bin/bash
+#     {{ backup_dir }}/{{ backup_name }}
+#   args:
+#     executable: /bin/bash
 
-- name: BACKUP | Find old backups
-  ansible.builtin.find:
-    paths: "{{ backup_dir }}"
-    patterns: "{{ dbname }}-*.sql"
-    age: "2d" # Optional: strictly rotate by count below, but age is good safety
-  register: old_backups
+# - name: BACKUP | Find old backups
+#   ansible.builtin.find:
+#     paths: "{{ backup_dir }}"
+#     patterns: "{{ dbname }}-*.sql"
+#     age: "2d" # Optional: strictly rotate by count below, but age is good safety
+#   register: old_backups
 
-- name: BACKUP | Cleanup old backups (Keep last 1)
-  ansible.builtin.shell: |
-    ls -tp {{ backup_dir }}/{{ dbname }}-*.sql | grep -v '/$' | tail -n +2 | xargs -I {} rm -- {}
+# - name: BACKUP | Cleanup old backups (Keep last 1)
+#   ansible.builtin.shell: |
+#     ls -tp {{ backup_dir }}/{{ dbname }}-*.sql | grep -v '/$' | tail -n +2 | xargs -I {} rm -- {}
 
-  ignore_errors: true
-  # Simple shell one-liner is often more reliable for "keep N" than complex find logic in ansible
+#   ignore_errors: true
+#   # Simple shell one-liner is often more reliable for "keep N" than complex find logic in ansible
