@@ -1,0 +1,30 @@
+---
+- name: Include database check tasks
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
+
+- name: DATABASE | Initialize database if it does not exist
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo db init -c {{ odoo_conf }} {{ dbname }} --country=SA --language=en_US --username=admin@sonod.tech --password='123admin456$'"
+  when: not database_exists
+  register: db_init_result
+  # Note: Username and password are hardcoded. Consider making these configurable via variables.
+
+- name: DATABASE | Install account module
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -i account --stop-after-init"
+  when: not database_exists
+  register: install_account_result
+
+- name: DATABASE | Install obs_all module
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -i obs_all --stop-after-init"
+  when: not database_exists
+  register: install_obs_all_result
+
+- name: DATABASE | Load Arabic language
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} --load-language=ar_001 --stop-after-init"
+  when: not database_exists
+  register: load_language_result
+
+- name: DATABASE | Upgrade obs_translate module with i18n
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --i18n-overwrite --stop-after-init"
+  when: not database_exists
+  register: upgrade_translate_result
+

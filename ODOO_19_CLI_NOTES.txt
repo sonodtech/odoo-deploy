@@ -1,0 +1,302 @@
+================================================================================
+ODOO 19.0 CLI COMMANDS - USAGE NOTES
+================================================================================
+
+This file documents the new Odoo 19.0 command-line interface (CLI) structure
+and how to use each command for deployment and maintenance operations.
+
+================================================================================
+BASIC USAGE
+================================================================================
+
+All Odoo 19.0 commands follow this structure:
+    odoo [--addons-path=PATH,...] <command> [options]
+
+To get help for any command:
+    odoo --help                    # List all available commands
+    odoo <command> --help          # Get help for a specific command
+    odoo <command> <subcommand> --help  # Get help for a subcommand
+
+================================================================================
+AVAILABLE COMMANDS
+================================================================================
+
+1. CLOC - Count lines of code per modules
+2. DB - Create, drop, dump, load databases
+3. DEPLOY - Deploy a module on an Odoo instance
+4. GENPROXYTOKEN - Generate and (re)set proxy access token in config file
+5. HELP - Display the list of available commands
+6. I18N - Import, export, setup languages and internationalization files
+7. MODULE - Manage modules, install demo data
+8. NEUTRALIZE - Neutralize a production database for testing: no emails sent
+9. OBFUSCATE - Obfuscate data in a given odoo database
+10. POPULATE - Populate database via duplication of existing data
+11. SCAFFOLD - Generates an Odoo module skeleton
+12. SERVER - Start the odoo server (default command)
+13. SHELL - Start odoo in an interactive shell
+14. START - Quickly start the odoo server with default options
+15. UPGRADE_CODE - Rewrite the entire source code using upgrade scripts
+
+================================================================================
+MODULE COMMAND - Module Management
+================================================================================
+
+Purpose: Manage modules, install demo data
+
+Get help:
+    odoo module --help
+
+Available subcommands:
+    install      - Install modules
+    upgrade      - Upgrade modules
+    uninstall    - Uninstall modules
+    force-demo   - Install demo data (force)
+
+MODULE UPGRADE (Most commonly used in deployment)
+--------------------------------------------------
+Command: odoo module upgrade
+
+Usage:
+    odoo module upgrade [-h] [-c CONFIG] [-d DB_NAME] [--outdated] MODULE [MODULE ...]
+
+Options:
+    -h, --help              Show help message and exit
+    -c CONFIG, --config CONFIG
+                            Use a specific configuration file
+    -d DB_NAME, --database DB_NAME
+                            Database name (connection details from config file)
+    --outdated              Only update modules that have a newer version on disk
+                            If 'all' is used, applies to all installed modules
+
+Positional arguments:
+    MODULE                  Name of modules to upgrade
+                            Use 'base' or 'all' to upgrade everything
+
+Examples:
+    # Upgrade all modules (equivalent to old click-odoo-update)
+    odoo module upgrade -c /etc/odoo.conf -d my_database all
+
+    # Upgrade specific modules
+    odoo module upgrade -c /etc/odoo.conf -d my_database sale purchase
+
+    # Upgrade only outdated modules
+    odoo module upgrade -c /etc/odoo.conf -d my_database --outdated all
+
+    # In Ansible deployment (using variables)
+    {{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} all
+
+Migration from old commands:
+    OLD: click-odoo-update -c config -d dbname --i18n-overwrite --if-exists
+    NEW: odoo module upgrade -c config -d dbname all
+
+    Note: --i18n-overwrite option may not be available in new CLI
+          --if-exists is replaced by using 'all' as module name
+          --no-http is not needed (implicit when running module commands)
+
+MODULE INSTALL
+--------------
+Command: odoo module install
+
+Usage:
+    odoo module install [-h] [-c CONFIG] [-d DB_NAME] MODULE [MODULE ...]
+
+Examples:
+    odoo module install -c /etc/odoo.conf -d my_database my_custom_module
+
+MODULE UNINSTALL
+----------------
+Command: odoo module uninstall
+
+Usage:
+    odoo module uninstall [-h] [-c CONFIG] [-d DB_NAME] MODULE [MODULE ...]
+
+Examples:
+    odoo module uninstall -c /etc/odoo.conf -d my_database old_module
+
+================================================================================
+DB COMMAND - Database Operations
+================================================================================
+
+Purpose: Create, drop, dump, load databases
+
+Get help:
+    odoo db --help
+
+This command replaces old database backup/restore utilities.
+
+Common use cases:
+    - Database backup (dump)
+    - Database restore (load)
+    - Create new databases
+    - Drop databases
+
+Note: Run 'odoo db --help' on your server to see exact syntax and options.
+
+================================================================================
+SERVER COMMAND - Start Odoo Server
+================================================================================
+
+Purpose: Start the odoo server (default command)
+
+Get help:
+    odoo server --help
+
+Usage:
+    odoo server [options]
+
+This replaces the old direct odoo-bin execution.
+
+Common options (check with --help for full list):
+    --addons-path=PATH      Specify addons paths
+    --config=CONFIG         Configuration file
+    --database=DB_NAME      Database name
+    --http-port=PORT        HTTP port
+    --workers=N             Number of workers
+
+Example:
+    odoo server --config=/etc/odoo.conf --database=my_db
+
+================================================================================
+SHELL COMMAND - Interactive Python Shell
+================================================================================
+
+Purpose: Start odoo in an interactive shell
+
+Usage:
+    odoo shell [-h] [-c CONFIG] [-d DB_NAME]
+
+This provides a Python console with Odoo context loaded.
+
+Useful for:
+    - Testing database operations
+    - Debugging
+    - Manual data manipulation
+    - Validation after deployment
+
+Example:
+    odoo shell -c /etc/odoo.conf -d my_database
+
+================================================================================
+DEPLOY COMMAND - Module Deployment
+================================================================================
+
+Purpose: Deploy a module on an Odoo instance
+
+Get help:
+    odoo deploy --help
+
+This is a new command in Odoo 19.0 for deploying modules.
+
+Note: Run 'odoo deploy --help' to see exact usage and options.
+
+================================================================================
+I18N COMMAND - Internationalization
+================================================================================
+
+Purpose: Import, export, setup languages and internationalization files
+
+Get help:
+    odoo i18n --help
+
+Useful for:
+    - Exporting translation files
+    - Importing translations
+    - Managing language files
+
+Note: The old --i18n-overwrite option from click-odoo-update may be handled
+      through this command instead.
+
+================================================================================
+UPGRADE_CODE COMMAND - Code Upgrades
+================================================================================
+
+Purpose: Rewrite the entire source code using upgrade scripts
+
+Usage:
+    odoo upgrade_code
+
+Location: Upgrade scripts found at /odoo/upgrade_code
+
+Use this when:
+    - Upgrading Odoo versions
+    - Applying code migration scripts
+    - Before deploying to existing installations
+
+================================================================================
+DEPLOYMENT WORKFLOW
+================================================================================
+
+For deployment scenarios, follow this sequence:
+
+1. PRE-DEPLOYMENT (if upgrading versions):
+   odoo upgrade_code
+
+2. DEPLOY CODE:
+   - Use ansistrano to deploy code to release directory
+   - Create virtual environment and install wheels
+
+3. BEFORE SYMLINK (maintenance mode):
+   - Switch Nginx to maintenance mode
+   - Stop Odoo service
+   - (Optional) Backup database using: odoo db dump
+
+4. SWITCH SYMLINK:
+   - Ansistrano switches 'current' symlink to new release
+
+5. AFTER CLEANUP (activate new version):
+   - Update modules: odoo module upgrade -c config -d dbname all
+   - Start Odoo service
+   - Switch Nginx back to production mode
+
+================================================================================
+COMMON DEPLOYMENT COMMANDS
+================================================================================
+
+Update all modules (used in after-cleanup.yml):
+    {{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} all
+
+Backup database (if needed, currently commented out):
+    odoo db dump -c {{ odoo_conf }} -d {{ dbname }} -f {{ backup_path }}
+
+Start server:
+    odoo server -c {{ odoo_conf }}
+
+Check module status:
+    odoo shell -c {{ odoo_conf }} -d {{ dbname }}
+    # Then in shell: env['ir.module.module'].search([])
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+If a command fails:
+1. Check the exact syntax: odoo <command> --help
+2. Verify configuration file path and permissions
+3. Ensure database exists and is accessible
+4. Check Odoo version: odoo --version (if available)
+
+For module upgrade issues:
+- Use --outdated flag to only update changed modules
+- Check module state in database using shell command
+- Verify addons-path includes all module directories
+
+================================================================================
+NOTES
+================================================================================
+
+- All commands should be run from the virtual environment or use full path:
+  /path/to/venv/bin/odoo <command>
+
+- Configuration file (-c option) is typically required for most operations
+
+- Database name (-d option) is required for module and database operations
+
+- The new CLI structure is more modular and follows modern CLI patterns
+
+- Some old click-odoo-* commands may have different option names or behaviors
+  Always check --help for the exact syntax
+
+================================================================================
+END OF NOTES
+================================================================================
+

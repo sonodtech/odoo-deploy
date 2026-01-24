@@ -1,0 +1,64 @@
+---
+- name: CONFIG | Extract database host from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^db_host\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: db_host_raw
+  changed_when: false
+  failed_when: false
+
+- name: CONFIG | Extract database user from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^db_user\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: db_user_raw
+  changed_when: false
+  failed_when: false
+
+- name: CONFIG | Extract database password from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^db_password\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: db_password_raw
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: CONFIG | Extract database port from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^db_port\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: db_port_raw
+  changed_when: false
+  failed_when: false
+
+- name: CONFIG | Set database connection parameters
+  ansible.builtin.set_fact:
+    db_host: "{{ db_host_raw.stdout | default('localhost') }}"
+    db_user: "{{ db_user_raw.stdout | default('odoo') }}"
+    db_password: "{{ db_password_raw.stdout | default('') }}"
+    db_port: "{{ db_port_raw.stdout | default('5432') }}"
+
+- name: DATABASE | Check if database exists (with password)
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    psql -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -lqt | cut -d \| -f 1 | grep -qw "{{ dbname }}"
+  register: db_exists_check
+  changed_when: false
+  failed_when: false
+  when: db_password | length > 0
+
+- name: DATABASE | Check if database exists (without password)
+  ansible.builtin.shell: |
+    psql -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -lqt | cut -d \| -f 1 | grep -qw "{{ dbname }}"
+  register: db_exists_check
+  changed_when: false
+  failed_when: false
+  when: db_password | length == 0
+
+- name: DATABASE | Set database exists fact
+  ansible.builtin.set_fact:
+    database_exists: "{{ db_exists_check.rc == 0 }}"
+  when: db_exists_check is defined
+
+- name: DATABASE | Set database exists to false if check failed
+  ansible.builtin.set_fact:
+    database_exists: false
+  when: db_exists_check is not defined
+
