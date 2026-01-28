@@ -6,6 +6,10 @@
   ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} all"
   when: database_exists | default(false)
 
+- name: ODOO | Update DB
+  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} obs_translate"
+  when: database_exists | default(false)
+
 - name: ODOO | Service start
   become: true
   ansible.builtin.systemd:
