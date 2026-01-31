@@ -3,11 +3,11 @@
   ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
 
 - name: ODOO | Update DB
-  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} all"
+  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u all --stop-after-init"
   when: database_exists | default(false)
 
 - name: ODOO | Update DB
-  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo module upgrade -c {{ odoo_conf }} -d {{ dbname }} obs_translate"
+  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --stop-after-init"
   when: database_exists | default(false)
 
 - name: ODOO | Service start
@@ -29,3 +29,4 @@
   ansible.builtin.systemd:
     name: nginx
     state: reloaded
+
