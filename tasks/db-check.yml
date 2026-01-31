@@ -55,10 +55,12 @@
 - name: DATABASE | Set database exists fact
   ansible.builtin.set_fact:
     database_exists: "{{ db_exists_check.rc == 0 }}"
-  when: db_exists_check is defined
+  when: 
+    - db_exists_check is defined
+    - db_exists_check is not skipped
 
 - name: DATABASE | Set database exists to false if check failed
   ansible.builtin.set_fact:
     database_exists: false
-  when: db_exists_check is not defined
+  when: db_exists_check is not defined or db_exists_check is skipped
 
