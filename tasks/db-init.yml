@@ -3,7 +3,7 @@
   ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
 
 - name: DATABASE | Initialize database if it does not exist
-  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo db init -c {{ odoo_conf }} {{ dbname }} --country=SA --language=en_US --username=admin@sonod.tech --password='123admin456$'"
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo db -c {{ odoo_conf }} init {{ dbname }} --country=SA --language=en_US --username=admin@sonod.tech --password='123admin456$'"
   when: not database_exists
   register: db_init_result
   # Note: Username and password are hardcoded. Consider making these configurable via variables.
