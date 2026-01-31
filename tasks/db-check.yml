@@ -39,7 +39,7 @@
   ansible.builtin.shell: |
     export PGPASSWORD="{{ db_password }}"
     psql -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -lqt | cut -d \| -f 1 | grep -qw "{{ dbname }}"
-  register: db_exists_check
+  register: db_exists_check_with_pwd
   changed_when: false
   failed_when: false
   when: db_password | length > 0
@@ -47,20 +47,32 @@
 - name: DATABASE | Check if database exists (without password)
   ansible.builtin.shell: |
     psql -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -lqt | cut -d \| -f 1 | grep -qw "{{ dbname }}"
-  register: db_exists_check
+  register: db_exists_check_no_pwd
   changed_when: false
   failed_when: false
   when: db_password | length == 0
 
-- name: DATABASE | Set database exists fact
+- name: DATABASE | Set database exists fact (with password)
   ansible.builtin.set_fact:
-    database_exists: "{{ db_exists_check.rc == 0 }}"
+    database_exists: "{{ db_exists_check_with_pwd.rc == 0 }}"
   when: 
-    - db_exists_check is defined
-    - db_exists_check is not skipped
+    - db_password | length > 0
+    - db_exists_check_with_pwd is defined
+    - db_exists_check_with_pwd is not skipped
+
+- name: DATABASE | Set database exists fact (without password)
+  ansible.builtin.set_fact:
+    database_exists: "{{ db_exists_check_no_pwd.rc == 0 }}"
+  when: 
+    - db_password | length == 0
+    - db_exists_check_no_pwd is defined
+    - db_exists_check_no_pwd is not skipped
 
 - name: DATABASE | Set database exists to false if check failed
   ansible.builtin.set_fact:
     database_exists: false
-  when: db_exists_check is not defined or db_exists_check is skipped
+  when: >
+    (db_password | length > 0 and (db_exists_check_with_pwd is not defined or db_exists_check_with_pwd is skipped)) or
+    (db_password | length == 0 and (db_exists_check_no_pwd is not defined or db_exists_check_no_pwd is skipped))
+
 
