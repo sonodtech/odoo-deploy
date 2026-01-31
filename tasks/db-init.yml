@@ -23,8 +23,8 @@
   when: not database_exists
   register: load_language_result
 
-- name: DATABASE | Upgrade obs_translate module with i18n
-  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --i18n-overwrite --stop-after-init"
+- name: DATABASE | Upgrade obs_translate module 
+  ansible.builtin.shell: "{{ ansistrano_release_path.stdout }}/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --stop-after-init"
   when: not database_exists
   register: upgrade_translate_result
 
