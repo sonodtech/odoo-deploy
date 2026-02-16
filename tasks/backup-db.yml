@@ -1,0 +1,132 @@
+---
+# ============================================================================
+# Backup Database and Filestore to S3
+# ============================================================================
+- name: Include database check tasks to get DB credentials
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
+
+- name: CONFIG | Extract data_dir from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^data_dir\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: data_dir_raw
+  changed_when: false
+  failed_when: false
+
+- name: CONFIG | Set data_dir variable
+  ansible.builtin.set_fact:
+    data_dir: "{{ data_dir_raw.stdout | default('') }}"
+
+- name: BACKUP | Set backup variables
+  ansible.builtin.set_fact:
+    backup_timestamp: "{{ lookup('pipe', 'date -u +%Y-%m-%d_%H-%M-%S') }}"
+    customer_name: "{{ lookup('env', 'CI_PROJECT_NAME') | default(dbname.split('-')[0], true) }}"
+    s3_bucket: "{{ lookup('env', 'S3_BUCKET') | default('sonodcustomersbackup', true) }}"
+    aws_region: "{{ lookup('env', 'AWS_REGION') | default('me-south-1', true) }}"
+
+- name: BACKUP | Set backup paths
+  ansible.builtin.set_fact:
+    work_dir: "/tmp/backup_{{ customer_name }}_{{ backup_timestamp }}"
+    dump_file: "{{ dbname }}_{{ backup_timestamp }}.dump"
+    sql_file: "{{ dbname }}_{{ backup_timestamp }}.sql"
+    backup_filename: "{{ dbname }}_{{ backup_timestamp }}.zip"
+    s3_path: "s3://{{ s3_bucket }}/{{ customer_name }}/backups/{{ dbname }}_{{ backup_timestamp }}.zip"
+
+- name: BACKUP | Display info
+  ansible.builtin.debug:
+    msg:
+      - "Customer: {{ customer_name }}"
+      - "Database: {{ dbname }}"
+      - "S3 Bucket: {{ s3_bucket }}"
+      - "Backup file: {{ backup_filename }}"
+
+- name: BACKUP | Create work directory
+  ansible.builtin.file:
+    path: "{{ work_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: BACKUP | Check if database exists
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    psql -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='{{ dbname }}';"
+  register: db_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: BACKUP | Fail if database does not exist
+  ansible.builtin.fail:
+    msg: "Database '{{ dbname }}' does not exist"
+  when: db_check.stdout != "1"
+
+- name: BACKUP | Dump database (custom format)
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    pg_dump -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -Fc -d "{{ dbname }}" -f "{{ work_dir }}/{{ dump_file }}"
+  no_log: true
+
+- name: BACKUP | Dump database (SQL format)
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    pg_dump -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -Fp -d "{{ dbname }}" -f "{{ work_dir }}/{{ sql_file }}"
+  no_log: true
+
+- name: BACKUP | Check if filestore exists
+  ansible.builtin.stat:
+    path: "{{ data_dir }}"
+  register: filestore_stat
+  when: data_dir | length > 0
+
+- name: BACKUP | Copy filestore
+  ansible.builtin.copy:
+    src: "{{ data_dir }}/"
+    dest: "{{ work_dir }}/filestore/"
+    remote_src: yes
+  when:
+    - data_dir | length > 0
+    - filestore_stat.stat.exists | default(false)
+
+- name: BACKUP | Create zip archive
+  community.general.archive:
+    path: "{{ work_dir }}/*"
+    dest: "/tmp/{{ backup_filename }}"
+    format: zip
+
+- name: BACKUP | Upload to S3
+  amazon.aws.s3_object:
+    bucket: "{{ s3_bucket }}"
+    object: "{{ customer_name }}/backups/{{ backup_filename }}"
+    src: "/tmp/{{ backup_filename }}"
+    mode: put
+    region: "{{ aws_region }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+
+- name: BACKUP | Verify S3 upload
+  amazon.aws.s3_object:
+    bucket: "{{ s3_bucket }}"
+    object: "{{ customer_name }}/backups/{{ backup_filename }}"
+    mode: getstr
+    region: "{{ aws_region }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+  register: s3_verify
+  failed_when: s3_verify.failed
+
+- name: BACKUP | Cleanup work directory
+  ansible.builtin.file:
+    path: "{{ work_dir }}"
+    state: absent
+
+- name: BACKUP | Cleanup local zip
+  ansible.builtin.file:
+    path: "/tmp/{{ backup_filename }}"
+    state: absent
+
+- name: BACKUP | Success message
+  ansible.builtin.debug:
+    msg:
+      - "✅ Backup completed successfully!"
+      - "S3 Location: {{ s3_path }}"

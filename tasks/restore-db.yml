@@ -1,0 +1,210 @@
+---
+# ============================================================================
+# Restore Database and Filestore from S3
+# ============================================================================
+- name: Include database check tasks to get DB credentials
+  ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
+
+- name: CONFIG | Extract data_dir from Odoo config
+  ansible.builtin.shell: |
+    grep -E "^data_dir\s*=" "{{ odoo_conf }}" 2>/dev/null | head -n 1 | sed 's/^[^=]*=\s*//' | sed "s/^['\"]//;s/['\"]$//" | tr -d ' '
+  register: data_dir_raw
+  changed_when: false
+  failed_when: false
+
+- name: CONFIG | Set data_dir variable
+  ansible.builtin.set_fact:
+    data_dir: "{{ data_dir_raw.stdout | default('') }}"
+
+- name: RESTORE | Set restore variables
+  ansible.builtin.set_fact:
+    customer_name: "{{ lookup('env', 'CI_PROJECT_NAME') | default(dbname.split('-')[0], true) }}"
+    s3_bucket: "{{ lookup('env', 'S3_BUCKET') | default('sonodcustomersbackup', true) }}"
+    aws_region: "{{ lookup('env', 'AWS_REGION') | default('me-south-1', true) }}"
+    dry_run: "{{ lookup('env', 'DRY_RUN') | default('false', true) }}"
+    work_dir: "/tmp/restore_{{ lookup('pipe', 'date +%s') }}"
+
+- name: RESTORE | WARNING
+  ansible.builtin.debug:
+    msg:
+      - "⚠️  WARNING: This will REPLACE the current database and filestore!"
+      - "Customer: {{ customer_name }}"
+      - "Database: {{ dbname }}"
+      - "DRY_RUN: {{ dry_run }}"
+
+- name: RESTORE | Pause for confirmation
+  ansible.builtin.pause:
+    prompt: "Press ENTER to continue with restore, or Ctrl+C to abort"
+  when: dry_run == 'false'
+
+- name: RESTORE | List S3 backups
+  amazon.aws.s3_object:
+    bucket: "{{ s3_bucket }}"
+    mode: list
+    prefix: "{{ customer_name }}/backups/"
+    region: "{{ aws_region }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+  register: s3_backups
+
+- name: RESTORE | Find latest backup
+  ansible.builtin.set_fact:
+    latest_backup: "{{ s3_backups.s3_keys | sort | last }}"
+  when: s3_backups.s3_keys | length > 0
+
+- name: RESTORE | Fail if no backup found
+  ansible.builtin.fail:
+    msg: "No backup found for customer {{ customer_name }}"
+  when: s3_backups.s3_keys | length == 0
+
+- name: RESTORE | Display backup info
+  ansible.builtin.debug:
+    msg: "Latest backup: {{ latest_backup }}"
+
+- name: RESTORE | Create work directory
+  ansible.builtin.file:
+    path: "{{ work_dir }}"
+    state: directory
+    mode: '0755'
+  when: dry_run == 'false'
+
+- name: RESTORE | Download backup from S3
+  amazon.aws.s3_object:
+    bucket: "{{ s3_bucket }}"
+    object: "{{ latest_backup }}"
+    dest: "{{ work_dir }}/backup.zip"
+    mode: get
+    region: "{{ aws_region }}"
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+  when: dry_run == 'false'
+
+- name: RESTORE | Extract backup
+  ansible.builtin.unarchive:
+    src: "{{ work_dir }}/backup.zip"
+    dest: "{{ work_dir }}/"
+    remote_src: yes
+  when: dry_run == 'false'
+
+- name: RESTORE | Find dump file
+  ansible.builtin.find:
+    paths: "{{ work_dir }}"
+    patterns: "*.dump"
+  register: dump_files
+  when: dry_run == 'false'
+
+- name: RESTORE | Set dump file path
+  ansible.builtin.set_fact:
+    dump_file_path: "{{ dump_files.files[0].path }}"
+  when:
+    - dry_run == 'false'
+    - dump_files.files | length > 0
+
+- name: RESTORE | Stop Odoo service
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ odoo_service }}"
+    state: stopped
+  when: dry_run == 'false'
+
+- name: RESTORE | Drop existing database
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    dropdb -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" --if-exists --force "{{ dbname }}"
+  no_log: true
+  when: dry_run == 'false'
+
+- name: RESTORE | Create new database
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    createdb -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" "{{ dbname }}"
+  no_log: true
+  when: dry_run == 'false'
+
+- name: RESTORE | Restore database
+  ansible.builtin.shell: |
+    export PGPASSWORD="{{ db_password }}"
+    pg_restore -h "{{ db_host }}" -p "{{ db_port }}" -U "{{ db_user }}" -d "{{ dbname }}" -Fc "{{ dump_file_path }}"
+  no_log: true
+  when: dry_run == 'false'
+
+- name: RESTORE | Check if filestore exists in backup
+  ansible.builtin.stat:
+    path: "{{ work_dir }}/filestore"
+  register: backup_filestore_stat
+  when: dry_run == 'false'
+
+- name: RESTORE | Remove old filestore
+  ansible.builtin.file:
+    path: "{{ data_dir }}"
+    state: absent
+  when:
+    - dry_run == 'false'
+    - data_dir | length > 0
+    - backup_filestore_stat.stat.exists | default(false)
+
+- name: RESTORE | Create filestore directory
+  ansible.builtin.file:
+    path: "{{ data_dir }}"
+    state: directory
+    mode: '0750'
+    owner: odoo
+    group: odoo
+  become: true
+  when:
+    - dry_run == 'false'
+    - data_dir | length > 0
+    - backup_filestore_stat.stat.exists | default(false)
+
+- name: RESTORE | Restore filestore
+  ansible.builtin.copy:
+    src: "{{ work_dir }}/filestore/"
+    dest: "{{ data_dir }}/"
+    remote_src: yes
+    owner: odoo
+    group: odoo
+    mode: '0750'
+  become: true
+  when:
+    - dry_run == 'false'
+    - data_dir | length > 0
+    - backup_filestore_stat.stat.exists | default(false)
+
+- name: RESTORE | Start Odoo service
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ odoo_service }}"
+    state: started
+  when: dry_run == 'false'
+
+- name: RESTORE | Wait for service to start
+  ansible.builtin.wait_for:
+    timeout: 5
+  when: dry_run == 'false'
+
+- name: RESTORE | Check service status
+  become: true
+  ansible.builtin.systemd:
+    name: "{{ odoo_service }}"
+  register: service_status
+  when: dry_run == 'false'
+
+- name: RESTORE | Display service status
+  ansible.builtin.debug:
+    msg: "Odoo service status: {{ service_status.status.ActiveState | default('unknown') }}"
+  when: dry_run == 'false'
+
+- name: RESTORE | Cleanup work directory
+  ansible.builtin.file:
+    path: "{{ work_dir }}"
+    state: absent
+  when: dry_run == 'false'
+
+- name: RESTORE | Success message
+  ansible.builtin.debug:
+    msg:
+      - "🎉 Restore completed successfully!"
+      - "Database: {{ dbname }}"
+      - "Backup source: s3://{{ s3_bucket }}/{{ latest_backup }}"
