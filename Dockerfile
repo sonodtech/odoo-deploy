@@ -33,8 +33,6 @@ COPY --chown=root --chmod=644 ansible.cfg /etc/ansible/ansible.cfg
 COPY --chown=gitlab-runner tasks /ansible/tasks
 COPY --chown=gitlab-runner deploy.yml /ansible
 
-# Ensure Ansible always uses our config (incl. deprecation_warnings)
-ENV ANSIBLE_CONFIG=/etc/ansible/ansible.cfg
 
 # Install Ansible Galaxy roles
 RUN /usr/bin/ansible-galaxy install ansistrano.deploy ansistrano.rollback
