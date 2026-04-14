@@ -3,12 +3,12 @@
   ansible.builtin.pip:
     name: pip
     state: latest
-    virtualenv: "{{ ansistrano_release_path.stdout }}/venv"
+    virtualenv: "{{ ansistrano_release_path }}/venv"
     virtualenv_python: "{{ python_version }}"
 
 - name: VIRTUAL ENVIRONMENT | Find to catch recursively all wheels
   ansible.builtin.find:
-    paths: "{{ ansistrano_release_path.stdout }}/release"
+    paths: "{{ ansistrano_release_path }}/release"
     patterns: "*.whl"
     recurse: true
   register: wheel_search
@@ -17,7 +17,4 @@
   ansible.builtin.pip:
     name: "{{ wheel_search.files | map(attribute='path') | list }}"
     extra_args: "--no-index"
-    virtualenv: "{{ ansistrano_release_path.stdout }}/venv"
-
-- name: Include database initialization tasks
-  ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-init.yml"
+    virtualenv: "{{ ansistrano_release_path }}/venv"
