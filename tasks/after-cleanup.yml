@@ -10,7 +10,7 @@
       register: odoo_update_all_result
 
     - name: ODOO | Update obs_translate module
-      ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --i18n-overwrite --stop-after-init"
+      ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --stop-after-init"
       when: odoo_update_all_result is succeeded
 
 - name: ODOO | Service start
