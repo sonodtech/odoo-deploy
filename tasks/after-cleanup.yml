@@ -2,16 +2,13 @@
 - name: Include database check tasks
   ansible.builtin.include_tasks: "{{ playbook_dir }}/tasks/db-check.yml"
 
-- name: ODOO | Upgrade database modules
+- name: ODOO | Update DB
+  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u all --stop-after-init"
   when: database_exists | default(false)
-  block:
-    - name: ODOO | Update DB
-      ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u all --i18n-overwrite --stop-after-init"
-      register: odoo_update_all_result
 
-    - name: ODOO | Update obs_translate module
-      ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --stop-after-init"
-      when: odoo_update_all_result is succeeded
+- name: ODOO | Update DB
+  ansible.builtin.shell: "{{ deploy_folder }}/current/venv/bin/odoo -c {{ odoo_conf }} --no-http -d {{ dbname }} -u obs_translate --stop-after-init"
+  when: database_exists | default(false)
 
 - name: ODOO | Service start
   become: true
